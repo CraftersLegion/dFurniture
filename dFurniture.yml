@@ -1,0 +1,304 @@
+dFurnitureInit:
+    type: task
+    debug: false
+    script:
+    - if <server.has_file[furniture/models.yml]>:
+        # Load Configuration File
+        - yaml load:furniture/models.yml id:furniturelib
+    - else:
+        # Create YAML Configuration File
+        - yaml create id:furniturelib
+        # Save YAML Configuration File
+        - yaml savefile:furniture/models.yml id:furniturelib
+        
+    - if <server.has_file[furniture/furniture.yml]>:
+        # Load Configuration File
+        - yaml load:furniture/furniture.yml id:furniture
+    - else:
+        # Create YAML Configuration File
+        - yaml create id:furniture
+        # Save YAML Configuration File
+        - yaml savefile:furniture/furniture.yml id:furniture
+        
+FurnitureBreakCheck:
+    type: task
+    debug: false
+    script:
+    - define breakFurniture false
+    - if <yaml[furniture].list_keys[].as_list.contains[<def[checkBreakLocation]>]>:
+        - define breakFurniture true
+        - define currentBreakFurniture <def[checkBreakLocation]>
+    - else:
+        # Loop Through All Furniture Placements
+        - foreach <yaml[furniture].list_keys[].as_list>:
+                
+            # Define Variables
+            - define currentFurniturePlacement <def[value]>
+                
+            # Check All Entities
+            - foreach <yaml[furniture].list_keys[<def[currentFurniturePlacement]>.entities]>:
+                # Check if Entity Location Matches Context
+                - define currentEntity <def[value]>
+                - if <yaml[furniture].read[<def[currentFurniturePlacement]>.entities.<def[currentEntity]>.location]> == <def[checkBreakLocation]>:
+                    - define breakFurniture true
+                    - define currentBreakFurniture <def[currentFurniturePlacement]>
+                    - foreach stop
+            # Check All Blocks
+            - foreach <yaml[furniture].list_keys[<def[currentFurniturePlacement]>.blocks]>:
+                # Check if Entity Location Matches Context
+                - define currentBlock <def[value]>
+                - if <yaml[furniture].read[<def[currentFurniturePlacement]>.blocks.<def[currentBlock]>.location]> == <def[checkBreakLocation]>:
+                    - define breakFurniture true
+                    - define currentBreakFurniture <def[currentFurniturePlacement]>
+                    - foreach stop
+FurnitureBreak:
+    type: task
+    debug: false
+    script:
+        # Remove All Entities of Furniture
+        - foreach <yaml[furniture].list_keys[<def[currentBreakFurniture]>.entities]>:
+            # Remove Entity from Existence
+            - remove <yaml[furniture].read[<def[currentBreakFurniture]>.entities.<def[value]>.id].as_entity>
+                
+        # Remove All Blocks of Furniture
+        - foreach <yaml[furniture].list_keys[<def[currentBreakFurniture]>.blocks]>:
+            # Remove All Blocks
+            - modifyblock <yaml[furniture].read[<def[currentBreakFurniture]>.blocks.<def[value]>.location]> m@air
+                
+        # Remove from YAML Database
+        - yaml id:furniture set <def[currentBreakFurniture]>:!
+        - yaml savefile:furniture/furniture.yml id:furniture
+FurnitureRotationGrab:
+    type: task
+    debug: false
+    script:
+        - if <context.relative> == <context.location.add[l@0,-1,0]>:
+            - define clickedSide "Bottom"
+        - else if <context.relative> == <context.location.add[l@0,1,0]>:
+            - define clickedSide "Top"
+        - else if <context.relative> == <context.location.add[l@0,0,-1]>:
+            - define clickedSide "Side"
+        - else if <context.relative> == <context.location.add[l@0,0,1]>:
+            - define clickedSide "Side"
+        - else if <context.relative> == <context.location.add[l@1,0,0]>:
+            - define clickedSide "Side"
+        - else if <context.relative> == <context.location.add[l@-1,0,0]>:
+            - define clickedSide "Side"
+        - narrate <def[clickedSide]>
+        - define playerFacing <player.location.yaw.simple>
+FurnitureCreate:
+    type: task
+    debug: false
+    script:
+        # Add to YAML Database
+        - yaml id:furniture set <context.relative>.furnitureModel:<def[itemName]>
+        - yaml id:furniture set <context.relative>.owner:<player>
+               
+        # Create All Entities
+        - define entityCount 0
+        - foreach <yaml[furniturelib].list_keys[<def[itemName]>.entities]>:
+                
+            # Define Variables
+            - define entityCount <def[entityCount].add[1]>
+            - define armorStand <def[value]>
+            - define armorStandDefaultLocation <context.location.add[l@<yaml[furniturelib].read[<def[itemName]>.entities.<def[armorStand]>.location.xOffset]>,<yaml[furniturelib].read[<def[itemName]>.entities.<def[armorStand]>.location.yOffset]>,<yaml[furniturelib].read[<def[itemName]>.entities.<def[armorStand]>.location.zOffset]>].add[l@0.5,1,0.5]>
+            - if <def[playerFacing]> == South:
+                - define armorStandFacing 180
+            - else if <def[playerFacing]> == North:
+                - define armorStandFacing 0
+                - define blockOffset 0
+            - else if <def[playerFacing]> == West:
+                - define armorStandFacing 270
+            - else if <def[playerFacing]> == East:
+                - define armorStandFacing 90
+            - define armorStandLocation l@<def[armorStandDefaultLocation].as_location.x>,<def[armorStandDefaultLocation].as_location.y>,<def[armorStandDefaultLocation].as_location.z>,180,<def[armorStandDefaultLocation].as_location.yaw.add[<def[armorStandFacing]>]>,<def[armorStandDefaultLocation].world.name>
+                 
+            # Create Furniture Entity
+            - spawn armor_stand[gravity=false;base_plate=false;marker=false;visible=false] <def[armorStandLocation].as_location> save:newArmorstand
+            - define currentArmorStand <entry[newArmorstand].spawned_entity>
+                    
+            # Fix Entity Rotation
+            - define newLocation l@<def[currentArmorStand].location.x>,<def[currentArmorStand].location.y>,<def[currentArmorStand].location.z>,<def[currentArmorStand].location.pitch>,90,<def[currentArmorStand].location.world.name>
+            - teleport <def[currentArmorStand].as_entity> <def[newLocation].as_location>
+                        
+            # Add to YAML Database
+            - yaml id:furniture set <context.relative>.entities.<def[entityCount]>.id:<def[currentArmorStand]>
+            - yaml id:furniture set <context.relative>.entities.<def[entityCount]>.location:<def[currentArmorStand].as_entity.location>
+                        
+            # Create All Blocks
+            - define blockCount 0
+            - foreach <yaml[furniturelib].list_keys[<def[itemName]>.blockList]>:
+                
+                # Define Variables
+                - define blockCount <def[blockCount].add[1]>
+                - define currentBlock <def[value]>
+                - if <def[playerFacing]> == South:
+                    - define blockLocationOffset l@<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.xOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.yOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.zOffset]>,<player.location.world.name>
+                    - define blockLocation <context.relative.add[<def[blockLocationOffset].as_location.rotate_around_y[<context.relative.yaw.add[180].to_radians>]>]>
+                - else if <def[playerFacing]> == North:
+                    - define blockLocationOffset l@<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.xOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.yOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.zOffset]>,<player.location.world.name>
+                    - define blockLocation <context.relative.add[<def[blockLocationOffset].as_location.rotate_around_y[<context.relative.yaw.add[0].to_radians>]>]>
+                - else if <def[playerFacing]> == West:
+                    - define blockLocationOffset l@<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.xOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.yOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.zOffset]>,<player.location.world.name>
+                    - define blockLocation <context.relative.add[<def[blockLocationOffset].as_location.rotate_around_y[<context.relative.yaw.add[90].to_radians>]>]>
+                - else if <def[playerFacing]> == East:
+                    - define blockLocationOffset l@<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.xOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.yOffset]>,<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.zOffset]>,<player.location.world.name>
+                    - define blockLocation <context.relative.add[<def[blockLocationOffset].as_location.rotate_around_y[<context.relative.yaw.add[270].to_radians>]>]>
+                
+                # Add Block to Game
+                - modifyblock l@<def[blockLocation].as_location.simple> <yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.material].as_material>
+                    
+            # Add to YAML Database
+            - yaml id:furniture set <context.relative>.blocks.<def[blockCount]>.material:<yaml[furniturelib].read[<def[itemName]>.blockList.<def[currentBlock]>.material]>
+            - yaml id:furniture set <context.relative>.blocks.<def[blockCount]>.location:l@<def[blockLocation].as_location.simple>
+            
+            # Setup YAML Values
+            - if <yaml[furniturelib].contains[<def[itemName]>.yaml]>:
+                - define yamlList <yaml[furniturelib].list_deep_keys[<def[itemName]>.yaml]>
+                - inject FurnitureYAMLSetup
+                
+                    
+        # Update & Save YAML Database
+        - yaml savefile:furniture/furniture.yml id:furniture
+        
+FurnitureYAMLSetup:
+    type: task
+    debug: false
+    script:
+    - foreach <def[yamlList].as_list> as:yamlValue:
+        - foreach <def[yamlList].as_list> as:yamlValueTwo:
+            - if <def[yamlValueTwo]> != <def[yamlValue]>:
+                - if <def[yamlValueTwo].starts_with[<def[yamlValue]>]>:
+                    - define yamlList <def[yamlList].exclude[<def[yamlValue]>]>
+    - foreach <def[yamlList].as_list> as:yamlValue:
+        - yaml id:furniture set "<context.relative>.<def[yamlValue]>:<yaml[furniturelib].read[<def[itemName]>.yaml.<def[yamlValue]>]>"
+                    
+dFurnitureEvents:
+    type: world
+    debug: false
+    events:
+    
+        # dFurniture Loading & Startup
+        on server prestart:
+        - inject dFurnitureInit
+        on reload scripts:
+        - inject dFurnitureInit
+        
+        # Inventory Management #
+        
+        # Click Events
+        on armor_stand damaged by player:
+        # Check if Player Clicked Furniture
+        - define checkBreakLocation <context.entity.location>
+        - inject FurnitureBreakCheck
+        # Check if Player Removing Furniture
+        - if <def[breakFurniture]> == true:
+            # Remove Furniture
+            - inject FurnitureBreak
+        on player left clicks block:
+        # Check if Player Clicked Furniture
+        - define checkBreakLocation <context.location>
+        - inject FurnitureBreakCheck
+        # Check if Player Removing Furniture
+        - if <def[breakFurniture]> == true:
+            # Remove Furniture
+            - inject FurnitureBreak
+        on player breaks block:
+        # Check if Player Clicked Furniture
+        - define checkBreakLocation <context.location>
+        - inject FurnitureBreakCheck
+        # Check if Player Removing Furniture
+        - if <def[breakFurniture]> == true:
+            # Remove Furniture
+            - inject FurnitureBreak
+        on player right clicks block:
+        
+        # Define Variables
+        - define prefix "<&f>[<&6>dFurniture<&f>] <&7>"
+        - if <context.item.display||null> != null:
+            - define itemName <context.item.display.as_element.replace[<&sp>]>
+        - else:
+            - define itemName null
+        
+        # Check if Holding Furniture
+        - if <yaml[furniturelib].list_keys[].as_list.contains[<def[itemName]>]>:
+        
+            # Get Rotational Values
+            - inject FurnitureRotationGrab
+            
+            # Check if Furniture Can Be Placed on Specific Side
+            - if <def[clickedSide].to_uppercase> == <yaml[furniturelib].read[<def[itemName]>.placeAbleSide].to_uppercase>:
+            
+                # Create Furniture
+                - inject FurnitureCreate
+            - determine cancelled
+        
+dFurnitureCommand:
+    type: command
+    debug: false
+    name: furniture
+    alises: f, dfurniture
+    script:
+    - define args <context.args>
+    - define prefix "<&f>[<&6>dFurniture<&f>] <&7>"
+    
+    # Check Any Arguments Specified
+    - if <def[args].get[1]||null> != null:
+    
+        # Check if using Give Command
+        - if <def[args].get[1]> == "GIVE":
+        
+            # Check if Furniture Model Specified
+            - if <def[args].get[2]||null> != null:
+            
+                # Check if Furniture Model Exists
+                - if <yaml[furniturelib].list_keys[].as_list.contains[<def[args].get[2].to_uppercase>]>:
+                
+                    # Define Furniture Model
+                    - define furnitureItem <yaml[furniturelib].read[<def[args].get[2].to_uppercase>.displayItem].as_item>
+                
+                    # Check if Optional Player Specified
+                    - if <def[args].get[3]||null> != null:
+                    
+                        # Check if Player Specified Exists
+                        - if <player[<def[args].get[3]>]||null> != null:
+                        
+                            # Give Furniture Item to Specified Player
+                            - give <player[<def[args].get[3]> <def[furnitureItem].as_item>
+                            
+                        # Invalid Player Specified
+                        - else:
+                        
+                            # Notify Player of Invalid Player Name
+                            - narrate "<def[prefix]> The player name you specified, <&dq><def[args].get[3]><&dq> does not exist."
+                    
+                    # Player Not Specified
+                    - else:
+                        
+                        # Check if Server Trying to Get Item
+                        - if <context.server>:
+                        
+                            # Notify Server Can't Get Shit
+                            - narrate "<def[prefix]> The console can't summon furniture to itself, it is not a sentient being."
+                        
+                        # Give Furniture to Player
+                        - else:
+                            - give <player> <def[furnitureItem].as_item>
+                
+                # Furniture Model Does Not Exist
+                - else:
+                    
+                    # Notify Player of Furniture's Non-Existence
+                    - narrate "<def[prefix]> The furniture <&dq><def[args].get[2]><&dq> does not exist, please check your spelling or try a different name."
+            
+            # Furniture Model Not Specified
+            - else:
+                
+                # Notify Player to Specify Furniture Model
+                - narrate "<def[prefix]> You need to specify the name of the furniture you want, for example: /furniture give <&lt>name<&gt> (player)"
+
+    # No Command Argument Specified
+    - else:
+        
+        # Print Help Command
+        - narrate "<def[prefix]> For help and a list of commands type <&dq>/furniture help<&dq>"
