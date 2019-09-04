@@ -237,6 +237,8 @@ dFurnitureCommand:
     type: command
     debug: false
     name: furniture
+    description: dFurniture commands.
+    usage: /furniture help
     alises: f, dfurniture
     script:
     - define args <context.args>
@@ -264,7 +266,7 @@ dFurnitureCommand:
                         - if <player[<def[args].get[3]>]||null> != null:
                         
                             # Give Furniture Item to Specified Player
-                            - give <player[<def[args].get[3]> <def[furnitureItem].as_item>
+                            - give <player[<def[args].get[3]>]> <def[furnitureItem].as_item>
                             
                         # Invalid Player Specified
                         - else:
